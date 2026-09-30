@@ -1,0 +1,67 @@
+on:
+  workflow_dispatch:
+
+jobs:
+  fast-media-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: System Optimization & Fast Desktop Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xfce4 xfce4-goodies pulseaudio xrdp wget curl
+          
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+          rm google-chrome-stable_current_amd64.deb
+
+          sudo systemctl enable xrdp
+          sudo sed -i 's/port=3389/port=3389/g' /etc/xrdp/xrdp.ini
+          
+          # إصلاح ملف بدء الجلسة لكي يعمل مع أي مستخدم بدون أخطاء
+          sudo sed -i 's/^test -x \/etc/#test -x \/etc/' /etc/xrdp/startwm.sh
+          sudo sed -i 's/^exec \/bin/#exec \/bin/' /etc/xrdp/startwm.sh
+          echo "startxfce4" | sudo tee -a /etc/xrdp/startwm.sh
+          
+          sudo systemctl restart xrdp
+
+      - name: Create Media User & Session Config
+        run: |
+          sudo useradd -m -s /bin/bash mediauser
+          echo "mediauser:MR.English2008" | sudo chpasswd
+          sudo usermod -aG sudo,audio,video mediauser
+          
+          # ضبط ملف الجلسة للمستخدم الجديد يدوياً لمنع ظهور خطأ Failsafe
+          echo "startxfce4" | sudo tee /home/mediauser/.xsession
+          sudo chown mediauser:mediauser /home/mediauser/.xsession
+          sudo chmod +x /home/mediauser/.xsession
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+
+      - name: Connect Tailscale & Get IP
+        run: |
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTHKEY }} --hostname=media-streamer-$GITHUB_RUN_ID
+          
+          tsIP=""
+          while [ -z "$tsIP" ]; do
+              tsIP=$(tailscale ip -4)
+              sleep 2
+          done
+          echo "TAILSCALE_IP=$tsIP" >> $GITHUB_ENV
+
+      - name: Show Connection Info
+        run: |
+          echo "===================================="
+          echo "🚀 Ultra-Fast Media Server is Ready!"
+          echo "📍 Tailscale IP: $TAILSCALE_IP"
+          echo "👤 User: mediauser"
+          echo "🔑 Password: MR.English2008"
+          echo "🌐 Browser: Google Chrome (Optimized for Video)"
+          echo "===================================="
+          while true; do
+              sleep 300
+          done
+          
